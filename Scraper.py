@@ -1,12 +1,14 @@
-__author__ = 'Michael'
-# Thanks to http://www.toptal.com/python/beginners-guide-to-concurrency-and-parallelism-in-python
-
 import urllib.request
 import os
 import argparse
 import re
+import subprocess
+
 from pathlib import Path
 from multiprocessing.pool import Pool
+
+__author__ = 'Michael'
+# Thanks to http://www.toptal.com/python/beginners-guide-to-concurrency-and-parallelism-in-python
 
 webcomic_name = None
 subset_type = None
@@ -58,19 +60,34 @@ def main():
                     subset_type = "Volume"
                     numbered_url += (str(i).zfill(len(sub_url)))
                 else:
-                    numbered_url += (sub_url)
+                    numbered_url += sub_url
 
             print("URL " + numbered_url + " added to queue.")
 
             urls.append(numbered_url)
 
+        # 12 is larger than any reasonable number of CPU cores, and a direct multiple of the most common ones.
         with Pool(12) as p:
             p.map(download_file, urls)
 
+        if subset_type is None:
+            rar_name = ("\"" + webcomic_name + ".cbr\"")
+        else:
+            rar_name = ("\"" + subset_type + " " + str(i) + ".cbr\"")
+
         # Move downloaded files into a .cbr archive.
-        # Will only work on Linux currently - too lazy for get it working on Windows.
-        rar_name = ("\"" + subset_type + " " + str(i) + ".cbr\"")
-        os.system('rar m -m0 ' + rar_name + " *.jpg")
+        try:
+            subprocess.call('rar m -m0 ' + rar_name + " *.jpg")
+
+            print()
+
+            if subset_type is None:
+                print('Successfully compressed ' + webcomic_name + ' to .cbr archive.')
+            else:
+                print('Successfully compressed ' + subset_type + " " + i + ' to .cbr archive.')
+        except OSError:
+            print('Rar is not installed on this machine.')
+    print('Finished downloading and archiving all files.')
 
 
 def download_file(url):
@@ -85,7 +102,9 @@ def download_file(url):
         if os.path.getsize(filename) < 25 * 1024:
             os.remove(filename)
 
-# Input url of a similar form to 'http://www.website/{vvv}/{p}.jpg' where v and p are placeholders indicating the number of digits in the volume/chapter and page numbers.
+
+# Input url of a similar form to 'http://www.website/{vvv}/{p}.jpg',
+# where v and p are placeholders indicating the number of digits in the volume/chapter and page numbers.
 # Example: http://www.casualvillain.com/Unsounded/comic/ch{cc}/pageart/ch{cc}_{pp}.jpg
 def split_url(url):
 
@@ -93,10 +112,9 @@ def split_url(url):
         print("Url must begin with http:// or https://")
         exit()
 
-#TODO: Check that the url is a direct link to an image file (too many formats, sort it out later)
-#if not re.match('\.jpg$', url):
-#    print("Url must end with .jpg (must be a direct link to the image file).")
-#    exit()
+    if not re.search('\.(jpg|jpeg|png|gif)$', url):
+        print("Url must end with .jpg, .jpeg, .png, .gif (must be a direct link to the image file).")
+        exit()
 
     if not re.findall('\{p+\}', url):
         print("Url must contain a page number placeholder!")
